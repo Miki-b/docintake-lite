@@ -1,9 +1,7 @@
 """Postgres-backed tests: encryption round-trip + RLS isolation.
 Skipped automatically when no DATABASE_URL is reachable.
 """
-import psycopg
-
-from app import config, db
+from app import db
 from tests.conftest import requires_db
 
 _OBS = {"resourceType": "Observation", "status": "final", "code": {"text": "HbA1c"}}
@@ -22,11 +20,12 @@ def test_encryption_roundtrip(clean_db):
 def test_ciphertext_is_not_plaintext(clean_db):
     with db.clinic_session(1) as cur:
         pid = db.upsert_patient(cur, 1, "Secret Name", "9999999")
-    # Superuser admin bypasses RLS and reads raw bytes.
-    with psycopg.connect(config.ADMIN_DATABASE_URL) as conn:
-        row = conn.execute("SELECT name_enc, mrn_enc FROM patients WHERE id=%s", [pid]).fetchone()
-    assert b"Secret Name" not in row[0]
-    assert b"9999999" not in row[1]
+        # Read the raw stored bytes (within clinic context so it works under
+        # FORCE RLS, e.g. on Neon's owner role, not only a superuser).
+        cur.execute("SELECT name_enc, mrn_enc FROM patients WHERE id=%s", [pid])
+        name_enc, mrn_enc = cur.fetchone()
+    assert b"Secret Name" not in bytes(name_enc)
+    assert b"9999999" not in bytes(mrn_enc)
 
 
 @requires_db

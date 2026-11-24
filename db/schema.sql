@@ -13,10 +13,17 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Application role: login, NO BYPASSRLS. Guarded so re-runs don't fail.
+-- Best-effort: on managed Postgres (e.g. Neon) creating a separate login role
+-- may be restricted. If so, connect the app as the owner role instead -- FORCE
+-- ROW LEVEL SECURITY below still enforces per-clinic isolation on the owner.
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
-    CREATE ROLE app_user LOGIN PASSWORD 'app_user' NOBYPASSRLS;
+    BEGIN
+      CREATE ROLE app_user LOGIN PASSWORD 'Dev_AppUser_7f3a!' NOBYPASSRLS;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE NOTICE 'app_user not created (%); rely on FORCE RLS as owner role.', SQLERRM;
+    END;
   END IF;
 END
 $$;
@@ -84,13 +91,20 @@ CREATE POLICY clinic_isolation ON observations
   WITH CHECK (clinic_id = NULLIF(current_setting('app.clinic_id', true), '')::int);
 
 -- Privileges for the app role (RLS still applies on top of these grants).
-GRANT USAGE ON SCHEMA public TO app_user;
-GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_user;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE ON TABLES TO app_user;
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO app_user;
+-- Guarded: only runs if app_user exists (see note above).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'app_user') THEN
+    GRANT USAGE ON SCHEMA public TO app_user;
+    GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO app_user;
+    GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO app_user;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT, INSERT, UPDATE ON TABLES TO app_user;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT USAGE, SELECT ON SEQUENCES TO app_user;
+  END IF;
+END
+$$;
 
 -- ---- Seed two clinics ----------------------------------------------------
 INSERT INTO clinics (id, name)
