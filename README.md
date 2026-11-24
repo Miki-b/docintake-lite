@@ -1,3 +1,16 @@
+---
+title: DocIntake Lite
+emoji: 🧪
+colorFrom: indigo
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
+<!-- The YAML above is read by Hugging Face Spaces to build the Docker image. -->
+<!-- It is harmless on GitHub (shown as a small metadata table). -->
+
 # DocIntake Lite
 
 A small prototype that turns **lab-report PDFs** (including noisy "scanned" ones)

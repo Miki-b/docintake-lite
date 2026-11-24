@@ -8,12 +8,28 @@
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import db
 from app.pipeline import process_pdf
 
 app = FastAPI(title="DocIntake Lite", version="0.1.0")
+
+# Serve the generated synthetic sample PDFs so the hosted demo is self-contained
+# (someone can grab e.g. /samples/report_01_clean.pdf and upload it via /docs).
+_SAMPLES_DIR = Path(__file__).resolve().parent.parent / "samples"
+if _SAMPLES_DIR.is_dir():
+    app.mount("/samples", StaticFiles(directory=str(_SAMPLES_DIR)), name="samples")
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    # Open straight into the interactive Swagger UI (the demo surface).
+    return RedirectResponse(url="/docs")
 
 
 @app.get("/health")
