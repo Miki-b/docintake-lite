@@ -1,0 +1,22 @@
+# Local Postgres for DocIntake Lite. Synthetic data only.
+#   docker compose -f db/docker-compose.yml up -d
+# Then apply the schema:
+#   python -m scripts.init_db
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: docintake
+    ports:
+      - "5433:5432"
+    volumes:
+      - docintake_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d docintake"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+volumes:
+  docintake_pg:
