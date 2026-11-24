@@ -1,0 +1,13 @@
+# Lightweight deps for CI. OCR is mocked in tests, so doctr/torch are omitted.
+numpy
+pypdfium2
+pillow
+reportlab
+fhir.resources
+python-dotenv
+psycopg[binary]
+fastapi
+python-multipart
+httpx
+pytest
+ruff
