@@ -1,0 +1,26 @@
+# Secrets / local config
+.env
+*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Generated samples / outputs
+samples/*.pdf
+samples/*.png
+reports/
+
+# Terraform
+infra/.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# OS
+Thumbs.db
+.DS_Store

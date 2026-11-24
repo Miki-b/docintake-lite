@@ -1,0 +1,1 @@
+"""DocIntake Lite application package."""

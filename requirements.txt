@@ -1,0 +1,17 @@
+# DocIntake Lite — added on top of the reused EHR venv (torch already present).
+# Install into that venv, e.g.:
+#   uv pip install --python /path/to/ehr/.venv/Scripts/python.exe -r requirements.txt
+reportlab
+python-doctr
+pypdfium2
+pillow
+numpy
+psycopg[binary]
+fastapi
+uvicorn[standard]
+python-multipart
+fhir.resources
+python-dotenv
+httpx
+pytest
+ruff
