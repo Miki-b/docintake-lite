@@ -134,52 +134,73 @@ _UNIT_CANON = {
 }
 
 
-def _canon_number(tok: str) -> str:
-    folded = tok.translate(_OCR_TRANS).replace(",", ".")
-    return folded
+_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+_RANGE_RE = re.compile(r"\d+(?:\.\d+)?[-–—]\d+(?:\.\d+)?")
 
 
-def _canon_unit(tok: str) -> str:
-    key = tok.lower().translate(_OCR_TRANS).replace("1", "l")  # unit letters, not digits
-    # e.g. 'mg/dl', 'g/dl', 'mmol/l'
-    return _UNIT_CANON.get(key, tok)
+def _fold_num(tok: str) -> str:
+    """Fold OCR digit confusions and normalise the decimal separator."""
+    return tok.translate(_OCR_TRANS).replace(",", ".")
+
+
+def _match_unit(tok: str) -> str | None:
+    # Fold digit->letter confusions for unit tokens (1->l, 0->o, |->l).
+    k = tok.strip().lower().replace("|", "l").replace("1", "l").replace("0", "o")
+    return _UNIT_CANON.get(k)
 
 
 def extract_rows(lines: list[str], ocr_text: str) -> list[LabRow]:
+    """Extract lab rows from a flat token stream so it tolerates OCR that puts
+    each table cell on its own line (doctr) as well as whole-row-per-line text.
+
+    For each known test name, the tokens up to the next test name supply the
+    value / unit / reference-range / flag, in any order.
+    """
+    tokens = ocr_text.split()
+    test_at: dict[int, str] = {}
+    for i, tok in enumerate(tokens):
+        nt = normalize(tok)
+        for key, canon in KNOWN_TESTS.items():
+            if normalize(key) == nt:
+                test_at[i] = canon
+                break
+    idxs = sorted(test_at)
     rows: list[LabRow] = []
     seen: set[str] = set()
-    for line in lines:
-        test_name = None
-        for key, canon in KNOWN_TESTS.items():
-            if normalize(key) in normalize(line):
-                test_name = canon
-                break
-        if not test_name or test_name in seen:
+    for pos, i in enumerate(idxs):
+        canon = test_at[i]
+        if canon in seen:
             continue
-        m = _ROW_TAIL.search(line)
-        if not m:
-            # test present but numbers unreadable -> record unverified shell
-            rows.append(LabRow(test=test_name, value=None, unit=None,
-                               reference_range=None, flag=None, verified=False))
-            seen.add(test_name)
-            continue
-        value = _canon_number(m.group("value"))
-        unit = _canon_unit(m.group("unit"))
-        low_ref = _canon_number(m.group("low"))
-        high_ref = _canon_number(m.group("high"))
-        flag = (m.group("flag") or "").upper() or None
-        verified = grounded(value, ocr_text)
+        seen.add(canon)
+        end = idxs[pos + 1] if pos + 1 < len(idxs) else min(len(tokens), i + 9)
+        window = tokens[i + 1:end]
+        value = unit = rng = flag = None
+        for tok in window:
+            folded = _fold_num(tok)
+            if value is None and _NUM_RE.fullmatch(folded):
+                value = folded
+                continue
+            if rng is None and _RANGE_RE.fullmatch(folded):
+                rng = folded
+                continue
+            if unit is None:
+                u = _match_unit(tok)
+                if u:
+                    unit = u
+                    continue
+            if flag is None and len(tok) == 1 and tok.upper() in ("H", "L", "N"):
+                flag = tok.upper()
+        verified = grounded(value, ocr_text) if value else False
         rows.append(
             LabRow(
-                test=test_name,
+                test=canon,
                 value=value,
                 unit=unit,
-                reference_range=f"{low_ref}-{high_ref}",
+                reference_range=rng,
                 flag=flag,
                 verified=verified,
             )
         )
-        seen.add(test_name)
     return rows
 
 

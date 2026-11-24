@@ -12,10 +12,23 @@ exposes it (doctr does; TrOCR does not, so confidence is None there).
 from __future__ import annotations
 
 import functools
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
 import pypdfium2 as pdfium
+
+# doctr downloads pretrained weights via urllib, which uses the OpenSSL default
+# trust store. On some machines that can't verify the CDN cert ("unable to get
+# issuer certificate"); point urllib/requests at certifi's CA bundle. Runs before
+# the (lazy) doctr import, so the download uses it.
+try:
+    import certifi
+
+    os.environ.setdefault("SSL_CERT_FILE", certifi.where())
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+except Exception:  # noqa: BLE001
+    pass
 
 # Render scale: ~216 DPI. Higher helps recognition on noisy scans.
 _RENDER_SCALE = 3.0
@@ -44,12 +57,24 @@ def render_pages(pdf_bytes: bytes) -> list[np.ndarray]:
     return pages
 
 
+# Smaller MobileNet det/reco models: CPU-friendly and a much smaller first-run
+# download than the default fast_base/crnn_vgg16. Override via DOCTR_DET_ARCH /
+# DOCTR_RECO_ARCH if desired.
+_DET_ARCH = os.getenv("DOCTR_DET_ARCH", "db_mobilenet_v3_large")
+_RECO_ARCH = os.getenv("DOCTR_RECO_ARCH", "crnn_mobilenet_v3_small")
+
+
 @functools.lru_cache(maxsize=1)
 def _doctr_model():
     from doctr.models import ocr_predictor
 
-    # pretrained=True downloads weights from the HF hub on first run.
-    return ocr_predictor(pretrained=True, assume_straight_pages=True)
+    # pretrained=True downloads weights on first run.
+    return ocr_predictor(
+        det_arch=_DET_ARCH,
+        reco_arch=_RECO_ARCH,
+        pretrained=True,
+        assume_straight_pages=True,
+    )
 
 
 def _ocr_doctr(pages: list[np.ndarray]) -> OcrResult:
